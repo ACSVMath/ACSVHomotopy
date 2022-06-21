@@ -1,7 +1,9 @@
 # ASCV Homotopy
 ## Homotopy Techniques for Analytic Combinatorics in Several Variables
-ACSVHomotopy is a Julia package for studying the power series expansions of multivariate rational functions.
-It is built using the functionality of [HomotopyContinuation.jl](https://www.juliahomotopycontinuation.org/).
+`ACSVHomotopy.jl` is a Julia package for studying the power series expansions of multivariate rational functions.
+It is built using the functionality of [HomotopyContinuation.jl](https://www.juliahomotopycontinuation.org/). 
+
+Development by [Kisun Lee](https://klee669.github.io/), [Stephen Melczer](https://melczer.ca), and [Josip Smolčić](https://josip.ca/).
 
 ## Usage
 To run a notebook with ACSVHomotopy:
