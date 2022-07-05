@@ -9,14 +9,14 @@ function split(h, n, vars)
   return subs(u, I => im), -im*subs(v, I => im), x, y
 end
 
-# determine the critical points
+# determine the critical points of h
 function get_crits(h, n, vars)
   @polyvar λ
   sys = System([h; vars .* differentiate(h, vars) - λ], variables=[vars; λ])
   sols = solutions(solve(sys; show_progress=false))
   if length(sols) > 0
     certs = filter(cert -> is_certified(cert), certificates(certify(sys, sols)))
-    return filter(cert -> abs.(certified_solution_interval(cert)[n+1]) < 0 || 0 < abs.(certified_solution_interval(cert)[n+1]), certs)
+    return filter(cert -> abs.(certified_solution_interval_after_krawczyk(cert)[n+1]) < 0 || 0 < abs.(certified_solution_interval_after_krawczyk(cert)[n+1]), certs)
   else
     return []
   end
@@ -27,6 +27,7 @@ function compare_acb(a, b)
   return !any((abs.(a - b) .< 0) .| (0 .< abs.(a - b)))
 end
 
+# get certified solutions to sys
 function get_certified_sols(sys, show_progress)
   res = solve(sys; show_progress=show_progress)
   if length(real_solutions(res)) > 0
@@ -42,7 +43,7 @@ function zero_to_one(x)
   return (0 < x) && (x < 1)
 end
 
-# get a start solution
+# get a start solution to sys
 function get_start_solution(sys, params; n_iters=1000)
   for _ in 1:n_iters
     z₀ = randn(ComplexF64, nvariables(sys))
@@ -55,7 +56,7 @@ end
 
 # TRUE if any solution has t ∈ (0, 1)
 function check_solutions(certs, tidx)
-  return length(certs) > 0 && any([zero_to_one(abs(certified_solution_interval(cert)[tidx])) for cert in certs])
+  return length(certs) > 0 && any([zero_to_one(abs(certified_solution_interval_after_krawczyk(cert)[tidx])) for cert in certs])
 end
 
 # FALSE if the system has no real solutions with t ∈ (0, 1)
@@ -84,27 +85,41 @@ function minimality_check(sys, params, tidx; show_progress=false, monodromy=fals
   return true
 end
 
-# Check assumption A1
-function checkA1(h, vars, crits; ϵ=1e-8)
-  ∇h = differentiate(h, vars)
-  return !any([∇h(vars => crit) < ϵ for crit in crits])
-end
+"""
+  leading_asymptotics(g, h, crits)
+Given the minimal critical points, leading_asymptotics prints the leading term of the asymptotic formula approximating the coefficients of the power series expansion of g/h around 0.
 
+Example:
+julia> using ACSVHomotopy
+
+julia> @polyvar x y
+(x, y)
+
+julia> h = 1-x-y
+-x - y + 1
+
+julia> minimal = find_min_crits_comb(h)
+1-element Array{Array{Float64,1},1}:
+ [0.5, 0.5]
+
+julia> leading_asymptotics(1, h, minimal)
+"(0.25)^(-n) n^(-0.5) (0.5641895835477563 + 0.0im)"
+
+"""
 function leading_asymptotics(g, h, crits)
   vars = variables(h)
   n = length(vars)
 
   res = ""
   for ζ in crits
-    λ = ζ[1] * subs(differentiate(h, vars[1]), vars => ζ)
-    U = [[convert(ComplexF64, ζ[k]*ζ[l]*subs(differentiate(differentiate(h, vars[k]), vars[l]), vars => ζ)) for k in 1:n] for l in 1:n]
-    ℋ = [[i == j ? prod(ζ)/convert(ComplexF64, λ*ζ[i]ζ[j])*(U[i][n] + U[j][n] - U[i][j] - U[n][n] - 2*λ) : prod(ζ)/convert(ComplexF64, λ*ζ[i]ζ[j])*(U[i][n] + U[j][n] - U[i][j] - U[n][n] - λ) for i in 1:n] for j in 1:n]
-    # map(r -> convert(Vector{ComplexF64}, r), ℋ )
+    λ = convert(ComplexF64, ζ[1] * subs(differentiate(h, vars[1]), vars => ζ))
+    U = [[convert(ComplexF64, ζ[k]*ζ[l]*subs(differentiate(differentiate(h, vars[k]), vars[l]), vars => ζ))/λ for k in 1:n] for l in 1:n]
+    ℋ = [[i == j ? convert(ComplexF64, 2 + U[i][j] - U[i][n] - U[j][n] + U[n][n]) : convert(ComplexF64, 1 + U[i][j] - U[i][n] - U[j][n] + U[n][n]) for i in 1:n-1] for j in 1:n-1]
     ℋ = reduce(hcat, ℋ )
-    # ℋ = convert(Matrix{ComplexF64}, ℋ )
 
-    coeff = (2π)^((1-n)/2) / sqrt(convert(ComplexF64, prod(ζ.^(3-n)) / ζ[n]^2 * det(ℋ ))) * (-subs(g, vars => ζ) / ζ[n]*subs(differentiate(h, vars[n]), vars => ζ))
+    coeff = (2π)^((1-n)/2) / sqrt(convert(ComplexF64, det(ℋ ))) * (-subs(g, vars => ζ) / convert(ComplexF64, ζ[n]*subs(differentiate(h, vars[n]), vars => ζ)))
     convert(ComplexF64, coeff)
+
     if res != ""
       res += " + "
     end
