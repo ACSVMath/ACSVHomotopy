@@ -1,18 +1,91 @@
-function find_min_crits_approx(h; certificates=false, show_progress=false, monodromy=false)
+# TRUE if any of the solutions in `sols` has t ∈ (0, 1)
+function check_solutions(
+    sys::System,
+    eqs::Vector{<:DynamicPolynomials.Polynomial{true, <:Number}},
+    vars::Vector{DynamicPolynomials.PolyVar{true}},
+    params::Vector{DynamicPolynomials.PolyVar{true}},
+    target_params::Vector{<:Number},
+    sols::Vector{<:Vector{<:Number}},
+    tidx::Integer
+  )
+
+  eqs = subs(eqs, params => target_params)
+  certs = distinct_certificates(certify(sys, sols, target_params))
+  certs = filter(cert -> is_certified(cert), certs)
+  intervals = certified_solution_interval_after_krawczyk.(certs)
+  intervals = map(I₀ -> refine(eqs, vars, I₀, tidx), intervals)
+  t_in_zero_to_one = filter(I₀ -> zero_to_one(real(I₀[tidx])), intervals)
+
+  return length(t_in_zero_to_one) > 0 # at least one sol has t ∈ (0, 1)
+end
+
+# Helper function for performing minimality check in ApproxCrit method
+# FALSE if the system has no real solutions with t ∈ (0, 1)
+function minimality_check(
+    eqs::Vector{<:DynamicPolynomials.Polynomial{true, <:Number}},
+    vars::Vector{DynamicPolynomials.PolyVar{true}},
+    params::Vector{DynamicPolynomials.PolyVar{true}},
+    target_params::Vector{<:Number},
+    tidx::Integer;
+    show_progress=false,
+    monodromy=false
+  )
+
+  # solve the system using the appropriate method, then check for solutions with t ∈ (0, 1)
+  sys = System(eqs, variables=vars, parameters=params)
+  if monodromy
+    init = get_start_solution(sys, target_params)
+    if !isnothing(init)
+      res = results(monodromy_solve(sys, init, target_params, show_progress=show_progress))
+      sols = real_solutions(res)
+      if length(sols) > 0
+        # if there exists a solution with t ∈ (0, 1), then the point is not minimal
+        return !check_solutions(sys, eqs, vars, params, target_params, sols, tidx)
+      end
+    end
+  else
+    res = results(solve(sys; target_parameters=target_params, show_progress=show_progress))
+    sols = real_solutions(res)
+    if length(sols) > 0
+      # if there exists a solution with t ∈ (0, 1), then the point is not minimal
+      return !check_solutions(sys, eqs, vars, params, target_params, sols, tidx)
+    end
+  end
+
+  # the point still may or may not be minimal (false positives are possible, the minimality check is inconclusive in this case)
+  return true
+end
+
+function find_min_crits_approx(h::DynamicPolynomials.Polynomial, r::Vector{<:Number}; show_progress=false, monodromy=false)
+
   vars = variables(h)
   n = length(vars)
 
   # solves a simpler system to get the critical points
-  crits = get_crits(h, n, vars)
+  crits = get_crits(h, r)
+  # crit_intervals = certified_solution_interval_after_krawczyk.(crits)
 
   # split h = u + v*im in the variables x, y
-  u, v, x, y = split(h, n, vars)
+  u, v, x, y = split(h)
   @assert (h(vars => x + im.*y) == u + im*v)
 
   # build the system & solve
-  @polyvar a[1:n] b[1:n] λᴿ λᴵ t ν μ ν₁ ν₂
+  a, b, λᴿ, λᴵ, t, ν, μ, ν₁, ν₂ = @polyvar a[1:n] b[1:n] λᴿ λᴵ t ν μ ν₁ ν₂
   circeqs = x.^2 + y.^2 - t.*(a.^2 + b.^2)
   J2eqs = (ν₁.*y - ν₂.*x) .* differentiate(u, x) - (ν₁.*x + ν₂.*y) .* differentiate(u, y)
+
+  tidx = 2n+1
+  eqs = [
+    [u; v; circeqs; subs(J2eqs[2:n], [ν₁, ν₂] => [0, 1])],
+    [u; v; circeqs; subs(J2eqs[2:n], [ν₁, ν₂] => [1, 0])],
+    [u; v; circeqs; subs(J2eqs, [ν₁, ν₂] => [1, ν]); 1 - ν*μ]
+  ]
+
+  vars = [
+    [x; y; t],
+    [x; y; t],
+    [x; y; t; ν; μ]
+  ]
 
   # assume every point is minimal
   minimal = [true for _ in 1:length(crits)]
@@ -21,23 +94,11 @@ function find_min_crits_approx(h; certificates=false, show_progress=false, monod
   for (idx, crit) in enumerate(crits)
     abvals = [real(solution_approximation(crit)[1:n]); imag(solution_approximation(crit)[1:n])]
 
-    # sys1: ν₁ = 0 in J2eqs
-    sys1 = System([u; v; circeqs; subs(J2eqs[2:n], [ν₁, ν₂] => [0, 1])], variables=[x; y; t], parameters=[a; b])
-    minimal[idx] &= minimality_check(sys1, abvals, 2*n+1; show_progress=show_progress, monodromy=monodromy)
-
-    # sys2: ν₂ = 0 in J2eqs
-    sys2 = System([u; v; circeqs; subs(J2eqs[2:n], [ν₁, ν₂] => [1, 0])], variables=[x; y; t], parameters=[a; b])
-    minimal[idx] &= minimality_check(sys2, abvals, 2*n+1; show_progress=show_progress, monodromy=monodromy)
-
-    # sys3: ν₁ and ν₂ are non-zero in J2eqs
-    sys3 = System([u; v; circeqs; subs(J2eqs, [ν₁, ν₂] => [1, ν]); 1 - ν*μ], variables=[x; y; t; ν; μ], parameters=[a; b])
-    minimal[idx] &= minimality_check(sys3, abvals, 2*n+1; show_progress=show_progress, monodromy=monodromy)
+    # run the minimality check on each system
+    minimal[idx] &= minimality_check(eqs[1], vars[1], [a; b], abvals, tidx; show_progress=show_progress, monodromy=monodromy)
+    minimal[idx] &= minimality_check(eqs[2], vars[2], [a; b], abvals, tidx; show_progress=show_progress, monodromy=monodromy)
+    minimal[idx] &= minimality_check(eqs[3], vars[3], [a; b], abvals, tidx; show_progress=show_progress, monodromy=monodromy)
   end
 
-  if certificates
-    return [crits[i] for i in 1:length(crits) if minimal[i]]
-  else
-    return [is_real(crits[i]) ? real(solution_approximation(crits[i]))[1:n] : solution_approximation(crits[i])[1:n] for i in 1:length(crits) if minimal[i]]
-  end
+  return [is_real(crits[i]) ? real(solution_approximation(crits[i]))[1:n] : solution_approximation(crits[i])[1:n] for i in 1:length(crits) if minimal[i]]
 end
-
