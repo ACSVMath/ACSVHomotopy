@@ -71,7 +71,7 @@ function find_min_crits_comb(h::DynamicPolynomials.Polynomial; r=Nothing, show_p
     end
 
     # refine sol_intervals and check for sols where t ∈ (0, 1)
-    sol_intervals = map(I₀ -> refine(eqs, vars, I₀, tidx), sol_intervals)
+    sol_intervals = map(I₀ -> refine_t(eqs, vars, I₀, tidx), sol_intervals)
     t_in_zero_to_one = filter(I₀ -> zero_to_one(real(I₀[tidx])), sol_intervals)
 
     # Filter those critical points which are real & positive (the n+1'th coord is λ)
@@ -91,8 +91,28 @@ function find_min_crits_comb(h::DynamicPolynomials.Polynomial; r=Nothing, show_p
     end
 
     ζ = ζ[1] # there is exactly one real positive minimal point
+    crit_intervals = filter(I -> !Arblib.overlaps(I, ζ), crit_intervals)
+
+    # TODO: figure out what number to put here
+    maxcoeff = maximum(coefficients(h))
+    deg = degree(leadingmonomial(h))
+    eta = log2(maxcoeff) + deg * log2(1+n)
+    Hn = deg^n + eta*deg^(n-1)
+    Cn = deg^n
+    B = Hn + (log2(max(deg^n*(deg^n-1), 1)) + 4*log2(deg+3))*Cn
+
+    minimal = [ζ]
+    for I in crit_intervals
+      if Arblib.overlaps(ArbMatrix(abs.(I)), ArbMatrix(abs.(ζ)))
+        refine([h; z .* differentiate(h, z) .- r*λ], [z; λ], AcbMatrix(I), 2^(-B))
+        refine([h; z .* differentiate(h, z) .- r*λ], [z; λ], AcbMatrix(ζ), 2^(-B))
+      end
+
+      if Arblib.overlaps(ArbMatrix(abs.(I)), ArbMatrix(abs.(ζ)))
+        push!(minimal, I)
+      end
+    end
     minimal = filter(crit -> compare_acb(abs.(certified_solution_interval_after_krawczyk(crit)[1:n]), ζ[1:n]), crits) # the other minimal points have same coordwise modulus
 
     return [is_real(w) ? real(solution_approximation(w))[1:n] : solution_approximation(w)[1:n] for w in minimal]
 end
-

@@ -82,7 +82,6 @@ function krawczyk(
   # for substitution into F
   x₀ = convert(Array{Acb}, x₀)
   x₀ = vcat(x₀...)
-
   Fx = subs(F, z => x₀)
   Fx = Arblib.AcbMatrix(convert(Array{Acb, 1}, Fx))
 
@@ -91,7 +90,7 @@ end
 
 # Given a system of polynomials `F` in the variables `z` and a certified solution interval I₀ as returned by `certified_solution_interval_after_krawczyk`,
 # this function returns a smaller certified solution interval J₀ so that 1 is not contained in the t coordinate of J₀.
-function refine(
+function refine_t(
     F::Vector{<:DynamicPolynomials.Polynomial{true, <:Number}},
     z::Vector{DynamicPolynomials.PolyVar{true}},
     I₀::Arblib.AcbMatrix,
@@ -116,19 +115,67 @@ function refine(
   Y = AcbMatrix(Y)
 
   for iter in 1:max_iters
+    if !Arblib.contains_zero(I₀[tidx] - 1)
+      return I₀ # interval does not contain 1
+    end
+
     nxt = krawczyk(F, z, I₀, J, Y)
     if !all(Arblib.contains(I₀[j], nxt[j]) for j in 1:n)
-      # The interval is not contracting TODO: throw error?
+      # The interval is not contracting
+      println("WARN: Intervals not contracting, false positive results possible.")
+      return I₀
+    end
+    I₀ = nxt
+  end
+
+  # max iterations reached
+  println("WARN: Max iterations reached, false positive results possible.")
+  return I₀
+end
+
+function refine(
+    F::Vector{<:DynamicPolynomials.Polynomial{true, <:Number}},
+    z::Vector{DynamicPolynomials.PolyVar{true}},
+    I₀::Arblib.AcbMatrix,
+    width::Real,
+    max_iters=100
+  )
+
+  # convert matrix to vector for substitutions to make sense
+  I₀ = vcat(I₀...)
+  n = length(I₀)
+
+  # Jacobian of system
+  J = differentiate(F, z)
+  J = subs(J, z => I₀)
+
+  # Convert to AcbMatrix - Arblib internal type & take mid points
+  J = AcbMatrix(convert(Array{Acb, 2}, J))
+  Arblib.get_mid!(J, J)
+
+  # Y matrix for Krawczyk
+  Y = inv(J)
+  Y = AcbMatrix(Y)
+
+  for iter in 1:max_iters
+    nxt = krawczyk(F, z, I₀, J, Y)
+    if !all(Arblib.contains(I₀[j], nxt[j]) for j in 1:n)
+      # The interval is not contracting
+      println("WARN: Intervals not contracting, false positive results possible.")
       return I₀
     end
 
     I₀ = nxt
-    if !Arblib.contains_zero(I₀[tidx] - 1)
-      return I₀ # interval does not contain 1
+    rerad = maximum(radius.(real(I₀)))
+    imrad = maximum(radius.(imag(I₀)))
+    if max(rerad, imrad) < width
+      # interval is sufficiently tight
+      return I₀
     end
   end
 
-  # max iterations reached TODO: throw error?
+  # max iterations reached
+  println("WARN: Max iterations reached, false positive results possible.")
   return I₀
 end
 

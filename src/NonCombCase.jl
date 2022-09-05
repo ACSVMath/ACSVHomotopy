@@ -113,7 +113,7 @@ function find_min_crits(h::DynamicPolynomials.Polynomial; r=Nothing, show_progre
       ), intervals[j])
 
       # tighten the intervals so none have a 1 as a possible t value, then check t ∈ (0, 1)
-      matched = map(I₀ -> refine(eqs[j], vars[j], I₀, tidx), matched)
+      matched = map(I₀ -> refine_t(eqs[j], vars[j], I₀, tidx), matched)
       t_in_zero_to_one = filter(I₀ -> zero_to_one(real(I₀[tidx])), matched)
 
       if length(t_in_zero_to_one) > 0
