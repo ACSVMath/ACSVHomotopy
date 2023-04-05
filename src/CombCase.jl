@@ -100,6 +100,7 @@ function find_min_crits_comb(h::DynamicPolynomials.Polynomial; r=Nothing, show_p
     Hn = deg^n + eta*deg^(n-1)
     Cn = deg^n
     B = Hn + (log2(max(deg^n*(deg^n-1), 1)) + 4*log2(deg+3))*Cn
+    println("B", B)
 
     minimal = [ζ]
     for I in crit_intervals

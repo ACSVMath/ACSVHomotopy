@@ -76,15 +76,13 @@ J2eqs = (ν₁.*y - ν₂.*x) .* differentiate(u, x) - (ν₁.*x + ν₂.*y) .* 
 
 tidx = 2n+1
 eqs = [
-  [u; v; circeqs; subs(J2eqs[2:n], [ν₁, ν₂] => [0, 1]); s*(1-t) - 1],
-  [u; v; circeqs; subs(J2eqs[2:n], [ν₁, ν₂] => [1, 0]); s*(1-t) - 1],
-  [u; v; circeqs; subs(J2eqs, [ν₁, ν₂] => [1, ν]); 1 - ν*μ; s*(1-t) - 1]
+  [u; v; circeqs; subs(J2eqs, [ν₁, ν₂] => [1, ν]); s*(1-t) - 1],
+  [u; v; circeqs; subs(J2eqs[2:n], [ν₁, ν₂] => [0, 1]); s*(1-t) - 1]
 ]
 
 vars = [
-  [x; y; t; s],
-  [x; y; t; s],
-  [x; y; t; s; ν; μ]
+  [x; y; t; s; ν],
+  [x; y; t; s]
 ]
 
 # assume every point is minimal
@@ -97,7 +95,6 @@ for (idx, crit) in enumerate(crits)
   # run the minimality check on each system
   minimal[idx] &= minimality_check(eqs[1], vars[1], [a; b], abvals, tidx; show_progress=show_progress, monodromy=monodromy)
   minimal[idx] &= minimality_check(eqs[2], vars[2], [a; b], abvals, tidx; show_progress=show_progress, monodromy=monodromy)
-  minimal[idx] &= minimality_check(eqs[3], vars[3], [a; b], abvals, tidx; show_progress=show_progress, monodromy=monodromy)
 end
 
 return [is_real(crits[i]) ? real(solution_approximation(crits[i]))[1:n] : solution_approximation(crits[i])[1:n] for i in 1:length(crits) if minimal[i]]

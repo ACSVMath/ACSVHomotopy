@@ -179,6 +179,11 @@ function refine(
   return I₀
 end
 
+function compute_aysymptotic_coefficients(g::DynamicPolynomials.Polynomial, h::DynamicPolynomials.Polynomial, r, ζ)
+  # P = (-sign(r[n])*subs(g, z => ζ) / convert(ComplexF64, ζ[n]*subs(differentiate(h, z[n]), z => ζ)))
+  # coeff = (2π)^((1-n)/2) / sqrt(convert(ComplexF64, det(r[n]*ℋ ))) * (-sign(r[n])*subs(g, z => ζ) / convert(ComplexF64, ζ[n]*subs(differentiate(h, z[n]), z => ζ)))
+end
+
 """
   leading_asymptotics(g, h, crits)
 Given the minimal critical points, leading_asymptotics prints the leading term of the asymptotic formula approximating the coefficients of the power series expansion of g/h around 0.
@@ -201,7 +206,7 @@ julia> leading_asymptotics(1, h, minimal)
 "(0.25)^(-n) n^(-0.5) (0.5641895835477563 + 0.0im)"
 
 """
-function leading_asymptotics(g, h::DynamicPolynomials.Polynomial, crits::Vector{<:Vector{<:Number}}; r=Nothing)
+function leading_asymptotics(g::DynamicPolynomials.Polynomial, h::DynamicPolynomials.Polynomial, crits::Vector{<:Vector{<:Number}}; r=Nothing)
 
   z = variables(h)
   n = length(z)

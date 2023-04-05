@@ -70,33 +70,27 @@ function find_min_crits(h::DynamicPolynomials.Polynomial; r=Nothing, show_progre
   # equations, systems and solutions for solving
   tidx = 4*n+3
   eqs = [
+    [u; v; circeqs; criteqs; subs(J2eqs, [ν₁, ν₂] => [1, ν]); s*(1-t) - 1],
     [u; v; circeqs; criteqs; subs(J2eqs[2:n], [ν₁, ν₂] => [0, 1]); s*(1-t) - 1],
-    [u; v; circeqs; criteqs; subs(J2eqs[2:n], [ν₁, ν₂] => [1, 0]); s*(1-t) - 1],
-    [u; v; circeqs; criteqs; subs(J2eqs, [ν₁, ν₂] => [1, ν]); 1 - ν*μ; s*(1-t) - 1]
   ]
 
   vars = [
-    [a; b; x; y; λᴿ; λᴵ; t; s],
-    [a; b; x; y; λᴿ; λᴵ; t; s],
-    [a; b; x; y; λᴿ; λᴵ; t; s; ν; μ]
+    [a; b; x; y; λᴿ; λᴵ; t; s; ν],
+    [a; b; x; y; λᴿ; λᴵ; t; s]
   ]
-
   system = [
     System(eqs[1], variables=vars[1]),
     System(eqs[2], variables=vars[2]),
-    System(eqs[3], variables=vars[3])
   ]
 
   certs = [
     filter(cert -> is_real(cert), get_certified_sols(system[1], show_progress=show_progress)),
     filter(cert -> is_real(cert), get_certified_sols(system[2], show_progress=show_progress)),
-    filter(cert -> is_real(cert), get_certified_sols(system[3], show_progress=show_progress))
   ]
 
   intervals = [
     certified_solution_interval_after_krawczyk.(certs[1]),
-    certified_solution_interval_after_krawczyk.(certs[2]),
-    certified_solution_interval_after_krawczyk.(certs[3])
+    certified_solution_interval_after_krawczyk.(certs[2])
   ]
 
   # assume every point is minimal then:
@@ -104,8 +98,8 @@ function find_min_crits(h::DynamicPolynomials.Polynomial; r=Nothing, show_progre
   minimal = [true for _ in 1:length(crits)]
   for idx in 1:length(crits)
 
-    # check each of the 3 systems
-    for j in 1:3
+    # check each of the 2 systems
+    for j in 1:2
       # solutions matching crit[idx] on first n coords
       matched = filter(I₀ -> compare_acb(
         real.(I₀)[1:n] + im.*real.(I₀)[n+1:2*n], # solution a, b vals
